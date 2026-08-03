@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golden Minute — Chennai Ambulance Dispatch Simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root{
+    --bg: #0A1420;
+    --panel: #12202F;
+    --panel-2: #16283A;
+    --line: #223448;
+    --amber: #FFB020;
+    --teal: #34D399;
+    --red: #FF5C5C;
+    --text: #EAF1F7;
+    --muted: #7E93A7;
+    --font-display: 'Big Shoulders Display', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background: var(--bg); color: var(--text); font-family: var(--font-body); -webkit-font-smoothing:antialiased; }
+  .app{max-width:1180px;margin:0 auto;padding:0 24px 64px;}
+
+  header.top{ display:flex; justify-content:space-between; align-items:flex-end; padding:32px 0 20px; border-bottom:1px solid var(--line); gap:20px; flex-wrap:wrap; }
+  .brand-eyebrow{ font-family:var(--font-mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--amber); margin:0 0 6px; }
+  h1.brand{ font-family:var(--font-display); font-weight:800; font-size:clamp(32px,5vw,50px); letter-spacing:.01em; margin:0; line-height:.95; text-transform:uppercase; }
+  .brand span{color:var(--teal);}
+  .tagline{color:var(--muted); font-size:14px; max-width:480px; margin:10px 0 0; line-height:1.5;}
+  .cta-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+  button.dispatch{ font-family:var(--font-display); font-weight:700; letter-spacing:.03em; text-transform:uppercase; font-size:19px; background:var(--amber); color:#1A1206; border:none; border-radius:6px; padding:14px 26px; cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
+  button.dispatch:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(255,176,32,.25); }
+  .status-pill{ font-family:var(--font-mono); font-size:12px; color:var(--muted); border:1px solid var(--line); border-radius:20px; padding:4px 12px; }
+  .status-pill.live{ color:var(--teal); border-color: rgba(52,211,153,.4); }
+
+  /* ---- Tabs ---- */
+  nav.tabs{ display:flex; gap:4px; margin-top:20px; border-bottom:1px solid var(--line); }
+  nav.tabs button{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:15px; background:none; border:none; color:var(--muted); padding:12px 18px; cursor:pointer; border-bottom:2px solid transparent; }
+  nav.tabs button.active{ color:var(--text); border-bottom-color: var(--amber); }
+  nav.tabs button:hover{ color:var(--text); }
+
+  .tabpanel{ display:none; margin-top:20px; }
+  .tabpanel.active{ display:block; }
+
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .card h2{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:18px; margin:0 0 10px; }
+
+  .decision-empty{ color:var(--muted); font-size:13.5px; line-height:1.6; margin:0; }
+  .compare{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .compare .side{ border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--panel-2); }
+  .compare .side.win{ border-color: rgba(52,211,153,.55); box-shadow: inset 0 0 0 1px rgba(52,211,153,.15); }
+  .compare .tag{ font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .compare .name{ font-weight:600; font-size:13.5px; margin:4px 0 6px; }
+  .compare .stat{ font-family:var(--font-mono); font-size:11.5px; color:var(--muted); margin:2px 0; }
+  .compare .stat b{ color:var(--text); }
+  .verdict{ margin-top:12px; font-size:13px; line-height:1.55; padding:10px 12px; border-radius:8px; background:rgba(255,176,32,.08); border:1px solid rgba(255,176,32,.3); }
+  .verdict.agree{ background:rgba(52,211,153,.08); border-color:rgba(52,211,153,.3); }
+
+  #leafletMap{ height:500px; border-radius:8px; border:1px solid var(--line); background:#0d1826; }
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; margin:10px 2px 0; font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+  .legend i{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .map-note{ font-family:var(--font-mono); font-size:10.5px; color:#4F6478; margin-top:8px; }
+
+  /* Leaflet dark theming */
+  .leaflet-tooltip.hospital-tt{ background:rgba(18,32,47,.92); border:1px solid var(--line); color:var(--text); font-family:var(--font-body); font-size:11.5px; border-radius:6px; padding:5px 8px; box-shadow:none; }
+  .leaflet-tooltip.hospital-tt b{ font-size:12.5px; }
+  .leaflet-tooltip.incident-tt{ background:rgba(255,92,92,.15); border:1px solid var(--red); color:#FFD7D7; font-family:var(--font-mono); font-size:11px; border-radius:6px; }
+  .incident-marker{ position:relative; width:20px; height:20px; }
+  .incident-marker .ring{ position:absolute; top:0; left:0; width:20px; height:20px; border-radius:50%; border:2px solid var(--red); animation:pulse-ring 1.6s infinite; }
+  .incident-marker .dot{ position:absolute; top:6px; left:6px; width:8px; height:8px; border-radius:50%; background:var(--red); }
+  @keyframes pulse-ring{ 0%{ transform:scale(0.5); opacity:1; } 100%{ transform:scale(1.8); opacity:0; } }
+  .ambulance-marker{ font-size:20px; line-height:1; filter:drop-shadow(0 0 4px rgba(255,255,255,.8)); }
+
+  .weights label{ display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:11px; color:var(--muted); margin:10px 0 4px; }
+  .weights input[type=range]{ width:100%; accent-color: var(--teal); }
+
+  .ranking-row{ display:grid; grid-template-columns: 20px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); }
+  .ranking-row:last-child{ border-bottom:none; }
+  .ranking-row .rank{ font-family:var(--font-mono); color:var(--muted); font-size:12px; }
+  .ranking-row .hname{ font-size:14px; font-weight:600; }
+  .ranking-row .sub{ font-family:var(--font-mono); font-size:10.5px; color:var(--muted); }
+  .ranking-row .score{ font-family:var(--font-mono); font-size:16px; font-weight:600; }
+  .bar-row{ display:flex; gap:4px; margin-top:5px; }
+  .bar{ flex:1; height:4px; border-radius:2px; background:var(--line); overflow:hidden; }
+  .bar > i{ display:block; height:100%; background:var(--teal); }
+  .bar-key{ display:flex; gap:14px; margin-top:10px; font-family:var(--font-mono); font-size:10px; color:var(--muted); }
+  .bar-key i{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+
+  #logList{ max-height:420px; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:7px; }
+  .log-entry{ font-family:var(--font-mono); font-size:12.5px; color:var(--muted); display:flex; gap:10px; }
+  .log-entry .t{ color:#4F6478; flex-shrink:0; }
+  .log-entry.alert{ color:var(--amber); }
+  .log-entry.good{ color:var(--teal); }
+
+  .explainer p.lead{ color:var(--muted); font-size:14px; line-height:1.6; }
+  .formula{ font-family:var(--font-mono); font-size:12.5px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:16px 0; overflow-x:auto; color:var(--teal); }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:14px; }
+  @media (max-width:820px){ .grid3{ grid-template-columns:1fr; } .compare{ grid-template-columns:1fr; } }
+  .grid3 .cell{ border:1px solid var(--line); border-radius:8px; padding:14px; background:var(--panel-2); }
+  .grid3 .cell .k{ font-family:var(--font-mono); font-size:10.5px; color:var(--amber); text-transform:uppercase; letter-spacing:.08em; }
+  .grid3 .cell h4{ margin:6px 0 4px; font-size:15px; }
+  .grid3 .cell p{ margin:0; font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .hospital-table{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px; }
+  .hospital-table th, .hospital-table td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  .hospital-table th{ color:var(--muted); font-family:var(--font-mono); font-weight:500; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; }
+
+  footer.foot{ margin-top:24px; border-top:1px solid var(--line); padding-top:18px; color:var(--muted); font-size:12px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div>
+      <p class="brand-eyebrow">Simulation · Chennai Ambulance-to-Hospital Routing</p>
+      <h1 class="brand">Golden<span>Minute</span></h1>
+      <p class="tagline">Routes patients to whichever Chennai hospital can actually treat them right now — not just whichever one is closest. Real hospitals, simulated live conditions.</p>
+    </div>
+    <div class="cta-wrap">
+      <button class="dispatch" id="dispatchBtn">New Emergency</button>
+      <span class="status-pill" id="statusPill">Console idle</span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="map" class="active">Map</button>
+    <button data-tab="ranking">Ranking</button>
+    <button data-tab="log">Log</button>
+    <button data-tab="about">About</button>
+  </nav>
+
+  <section class="tabpanel active" id="tab-map">
+    <div class="card" id="decisionCard">
+      <h2>Dispatch Decision</h2>
+      <p class="decision-empty">Press <b>New Emergency</b> to simulate a call coming in. Golden Minute will compare the nearest hospital against the best-ranked one and show you why they might not be the same place.</p>
+    </div>
+    <div class="card" style="padding:14px;">
+      <div id="leafletMap"></div>
+      <div class="legend">
+        <span><i style="background:var(--teal)"></i>Ready capacity</span>
+        <span><i style="background:var(--amber)"></i>Under pressure</span>
+        <span><i style="background:var(--red)"></i>At capacity</span>
+        <span>🚑 Ambulance</span>
+      </div>
+      <p class="map-note">Map tiles © OpenStreetMap contributors, © CARTO. Routes are straight-line approximations, not turn-by-turn driving directions.</p>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="tab-ranking">
+    <div class="card weights">
+      <h2>Scoring Weights</h2>
+      <label>ICU Availability <span id="wIcuVal">35%</span></label>
+      <input type="range" id="wIcu" min="0" max="60" value="35">
+      <label>Specialist Match <span id="wSpecVal">30%</span></label>
+      <input type="range" id="wSpec" min="0" max="60" value="30">
+      <label>ER Load <span id="wLoadVal">20%</span></label>
+      <input type="range" id="wLoad" min="0" max="60" value="20">
+      <label>Travel Time (ETA) <span id="wEtaVal">15%</span></label>
+      <input type="range" id="wEta" min="0" max="60" value="15">
+    </div>
+    <div class="card">
+      <h2>Hospital Ranking</h2>
+      <div id="rankingList"></div>
+      <div class="bar-key">
+        <span><i style="background:var(--teal)"></i>ICU</span>
+        <span><i style="background:var(--amber)"></i>Specialist</span>
+        <span><i style="background:#7DD3FC"></i>Load</span>
+        <span><i style="background:#C4B5FD"></i>ETA</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="tab-log">
+    <div class="card">
+      <h2>Dispatch Log</h2>
+      <div id="logList"></div>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="tab-about">
+    <div class="card explainer">
+      <h2>How the score is built</h2>
+      <p class="lead">Every hospital is re-scored the moment a call comes in, using live-modeled conditions rather than a static map. Four factors are normalized to 0–100 and combined by weight:</p>
+      <div class="formula">score = (ICU% · w<sub>icu</sub> + specialist_match · w<sub>spec</sub> + (100 − ER_load%) · w<sub>load</sub> + eta_score · w<sub>eta</sub>) / Σw</div>
+      <div class="grid3">
+        <div class="cell"><div class="k">Factor 01</div><h4>ICU availability</h4><p>Open ICU beds as a share of each hospital's ICU capacity — the strongest predictor of whether a critical patient gets treated on arrival or waits.</p></div>
+        <div class="cell"><div class="k">Factor 02</div><h4>Specialist match</h4><p>Whether the on-duty team covers the case type — cardiac, trauma, neuro, burns, pediatric. A close hospital without the right specialist scores low here on purpose.</p></div>
+        <div class="cell"><div class="k">Factor 03</div><h4>ER load</h4><p>Current emergency-room utilization. A hospital running near full load absorbs a new critical patient far worse than a quieter one a few minutes further out.</p></div>
+        <div class="cell"><div class="k">Factor 04</div><h4>Travel time</h4><p>Estimated transit time from live position, scaled against the other candidates in this scenario. It still matters — it's just no longer the only thing that matters.</p></div>
+        <div class="cell"><div class="k">Behavior</div><h4>Dynamic rerouting</h4><p>Conditions can change mid-transit — a bed fills, a load spikes. When that happens en route, the system re-scores and can redirect the ambulance before arrival.</p></div>
+        <div class="cell"><div class="k">In production</div><h4>Real data sources</h4><p>This demo randomizes hospital telemetry. A live deployment would pull ICU/bed counts from hospital bed-management systems, ER load from triage systems, and position from ambulance GPS/telematics.</p></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Data sources</h2>
+      <div class="grid3">
+        <div class="cell">
+          <div class="k">Dataset 01</div>
+          <h4>Urban Traffic Flow Dataset</h4>
+          <p>Kaggle (ziya07). 200 sensor readings of vehicle speed and congestion level across peak/off-peak windows. Used to calibrate the speed and congestion values sampled for every ETA calculation — replacing a flat guess with distributions drawn from the data (mean ~61.6 km/h, congestion-level frequencies per traffic period).</p>
+        </div>
+        <div class="cell">
+          <div class="k">Dataset 02</div>
+          <h4>Hospital Patient Records Dataset</h4>
+          <p>Kaggle (blueblushed). ~984 patient records across 15 conditions. Used for the emergency case types simulated (Heart Attack, Stroke, Childbirth, Kidney Stones, etc.) and for the average length of stay, discharge status, and readmission rate shown as an outcome projection once the ambulance arrives.</p>
+        </div>
+        <div class="cell">
+          <div class="k">Not from these datasets</div>
+          <h4>Hospital ICU / bed / load figures</h4>
+          <p>Neither dataset contains real-time hospital capacity data, so ICU availability and ER load are still randomly simulated each run — they are not live figures from these six hospitals.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Hospitals modeled in this simulation</h2>
+      <table class="hospital-table" id="hospitalTable"></table>
+      <p class="map-note" style="margin-top:10px;">Names and locations are real Chennai hospitals. Bed counts are approximate published figures used for scale; ICU availability and ER load shown in the simulation are randomly generated each run and are not real, live data from these hospitals.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    Golden Minute is a simulation built for an academic proposal on treatment-readiness-first ambulance routing. It models a virtual dispatch scenario over real Chennai hospital locations; it is not connected to any hospital's real systems and does not reflect real capacity.
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Data: real Chennai hospitals ----------
+  const hospitals = [
+    { id:'rggh',     name:"Rajiv Gandhi Government General Hospital", area:"Park Town",     lat:13.081417, lng:80.277194, maxICU:36, maxBeds:500, specialties:['trauma','cardiac','neuro','pulmonary','burn','oncology','obstetric'] },
+    { id:'stanley',  name:"Stanley Medical College Hospital",         area:"Royapuram",     lat:13.106225, lng:80.286745, maxICU:18, maxBeds:300, specialties:['trauma','burn'] },
+    { id:'apollo',   name:"Apollo Hospitals, Greams Road",            area:"Thousand Lights",lat:13.063112, lng:80.251827, maxICU:30, maxBeds:400, specialties:['cardiac','neuro','trauma','pulmonary','oncology','obstetric'] },
+    { id:'fortis',   name:"Fortis Malar Hospital",                    area:"Adyar",         lat:13.010000, lng:80.258900, maxICU:20, maxBeds:180, specialties:['cardiac','neuro','pediatric'] },
+    { id:'childs',   name:"Kanchi Kamakoti CHILDS Trust Hospital",    area:"Nungambakkam",  lat:13.057341, lng:80.245786, maxICU:15, maxBeds:200, specialties:['pediatric'] },
+    { id:'miot',     name:"MIOT International",                      area:"Manapakkam",    lat:13.021362, lng:80.183372, maxICU:32, maxBeds:600, specialties:['trauma','cardiac','pulmonary','nephrology','orthopedic'] },
+  ];
+
+  const incidentSites = [
+    { lat:13.0418, lng:80.2341, label:"T. Nagar" },
+    { lat:13.0732, lng:80.2609, label:"Egmore" },
+    { lat:13.0850, lng:80.2101, label:"Anna Nagar" },
+    { lat:13.0067, lng:80.2206, label:"Guindy" },
+    { lat:12.9756, lng:80.2207, label:"Velachery" },
+  ];
+
+  // Case types + avgLOS/outcome/readmission drawn from the Hospital Patient Records dataset (Kaggle: blueblushed/hospital-dataset-for-practice)
+  const caseTypes = [
+    { name:"Heart Attack",         req:'cardiac',     critical:true,  avgLOS:41.0, outcome:'Stable',    readmit:100 },
+    { name:"Heart Disease",        req:'cardiac',     critical:true,  avgLOS:38.2, outcome:'Recovered', readmit:98 },
+    { name:"Stroke",               req:'neuro',       critical:true,  avgLOS:40.3, outcome:'Stable',    readmit:50 },
+    { name:"Fractured Leg",        req:'trauma',      critical:true,  avgLOS:39.0, outcome:'Recovered', readmit:0 },
+    { name:"Fractured Arm",        req:'trauma',      critical:false, avgLOS:34.3, outcome:'Recovered', readmit:50 },
+    { name:"Appendicitis",         req:'trauma',      critical:true,  avgLOS:37.4, outcome:'Recovered', readmit:50 },
+    { name:"Allergic Reaction",    req:'pulmonary',   critical:true,  avgLOS:34.2, outcome:'Recovered', readmit:0 },
+    { name:"Respiratory Infection",req:'pulmonary',   critical:false, avgLOS:34.7, outcome:'Stable',    readmit:0 },
+    { name:"Childbirth",           req:'obstetric',   critical:true,  avgLOS:35.5, outcome:'Recovered', readmit:0 },
+    { name:"Kidney Stones",        req:'nephrology',  critical:false, avgLOS:36.5, outcome:'Recovered', readmit:0 },
+    { name:"Osteoarthritis",       req:'orthopedic',  critical:false, avgLOS:37.9, outcome:'Stable',    readmit:0 },
+    { name:"Cancer",               req:'oncology',    critical:false, avgLOS:42.7, outcome:'Recovered', readmit:50 },
+    { name:"Prostate Cancer",      req:'oncology',    critical:false, avgLOS:41.6, outcome:'Recovered', readmit:0 },
+    { name:"Hypertension",         req:null,          critical:false, avgLOS:35.5, outcome:'Stable',    readmit:0 },
+    { name:"Diabetes",             req:null,          critical:false, avgLOS:36.1, outcome:'Stable',    readmit:2 },
+  ];
+
+  // Speed + congestion sampling calibrated from the Urban Traffic Flow Dataset (Kaggle: ziya07/urban-traffic-flow-dataset)
+  const TRAFFIC_STATS = {
+    speedMean: 61.6, speedStdev: 10.1,
+    congestionDist: { 'Peak': [0.304,0.343,0.157,0.147,0.039,0.010], 'Off-Peak': [0.337,0.316,0.194,0.082,0.031,0.041] }
+  };
+
+  // ---------- State ----------
+  const state = { weights:{icu:35,spec:30,load:20,eta:15}, dyn:{}, active:null, animId:null, markers:{}, ambulanceMarker:null, incidentMarker:null, routeLine:null };
+  hospitals.forEach(h => { state.dyn[h.id] = { icu:h.maxICU, load:40 }; });
+
+  // ---------- Helpers ----------
+  function rnd(min,max){ return Math.random()*(max-min)+min; }
+  function rndInt(min,max){ return Math.round(rnd(min,max)); }
+  function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+  function nowLabel(){ return new Date().toTimeString().slice(0,8); }
+
+  function haversineKm(a,b){
+    const R=6371;
+    const dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+    const lat1=a.lat*Math.PI/180, lat2=b.lat*Math.PI/180;
+    const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(h));
+  }
+
+  function specialistScore(hospital, caseType){
+    if (!caseType.req) return 100;
+    return hospital.specialties.includes(caseType.req) ? 100 : 20;
+  }
+
+  function currentPeakState(){
+    const h = new Date().getHours();
+    return ((h>=8 && h<=10) || (h>=17 && h<=20)) ? 'Peak' : 'Off-Peak';
+  }
+
+  function sampleCongestionLevel(peakState){
+    const dist = TRAFFIC_STATS.congestionDist[peakState];
+    let r = Math.random(), cum = 0;
+    for (let i=0;i<dist.length;i++){ cum += dist[i]; if (r <= cum) return i; }
+    return dist.length - 1;
+  }
+
+  function sampleSpeedKmh(){
+    let u=0,v=0; while(u===0) u=Math.random(); while(v===0) v=Math.random();
+    const z = Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+    return clamp(TRAFFIC_STATS.speedMean + z*TRAFFIC_STATS.speedStdev, 25, 95);
+  }
+
+  function computeEtas(incident){
+    const peakState = currentPeakState();
+    const etas = {}, meta = {};
+    hospitals.forEach(h => {
+      const speed = sampleSpeedKmh();
+      const congestion = sampleCongestionLevel(peakState);
+      const congestionPenalty = 1 + congestion*0.09;
+      const minutes = (haversineKm(h, incident) / speed) * 60 * congestionPenalty;
+      etas[h.id] = Math.max(2, minutes);
+      meta[h.id] = { speed: Math.round(speed), congestion, peakState };
+    });
+    return { etas, meta, peakState };
+  }
+
+  function scoreAll(caseType, etas, weights){
+    const etaVals = hospitals.map(h => etas[h.id]);
+    const minEta = Math.min(...etaVals), maxEta = Math.max(...etaVals);
+    const totalW = weights.icu + weights.spec + weights.load + weights.eta || 1;
+    return hospitals.map(h => {
+      const dyn = state.dyn[h.id];
+      const icuScore = clamp((dyn.icu / h.maxICU) * 100, 0, 100);
+      const specScore = specialistScore(h, caseType);
+      const loadScore = clamp(100 - dyn.load, 0, 100);
+      const etaScore = maxEta === minEta ? 100 : clamp(100 - ((etas[h.id]-minEta)/(maxEta-minEta))*100, 0, 100);
+      const total = (icuScore*weights.icu + specScore*weights.spec + loadScore*weights.load + etaScore*weights.eta) / totalW;
+      return { hospital:h, icuScore, specScore, loadScore, etaScore, eta:etas[h.id], total };
+    }).sort((a,b) => b.total - a.total);
+  }
+
+  function rollLiveConditions(naiveHospitalId, caseType){
+    hospitals.forEach(h => { state.dyn[h.id] = { icu: rndInt(0, h.maxICU), load: rndInt(30, 90) }; });
+    if (Math.random() < 0.65){
+      const naive = hospitals.find(h => h.id === naiveHospitalId);
+      state.dyn[naive.id] = { icu: rndInt(0,1), load: rndInt(90,99) };
+      const candidates = hospitals.filter(h => h.id !== naive.id);
+      const matched = candidates.filter(h => caseType.req && h.specialties.includes(caseType.req));
+      const pool = matched.length ? matched : candidates;
+      const hero = pool[rndInt(0, pool.length-1)];
+      state.dyn[hero.id] = { icu: rndInt(Math.floor(hero.maxICU*0.6), hero.maxICU), load: rndInt(20,45) };
+    }
+  }
+
+  // ---------- Logging ----------
+  function log(msg, cls){
+    const el = document.getElementById('logList');
+    const row = document.createElement('div');
+    row.className = 'log-entry' + (cls ? ' '+cls : '');
+    row.innerHTML = '<span class="t">'+nowLabel()+'</span><span>'+msg+'</span>';
+    el.appendChild(row);
+  }
+
+  // ---------- Leaflet map ----------
+  let map;
+  function initMap(){
+    map = L.map('leafletMap', { zoomControl:true, attributionControl:true });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      subdomains: 'abcd', maxZoom: 19
+    }).addTo(map);
+
+    const bounds = L.latLngBounds(hospitals.map(h => [h.lat, h.lng]).concat(incidentSites.map(s => [s.lat, s.lng])));
+    map.fitBounds(bounds, { padding:[30,30] });
+
+    hospitals.forEach(h => {
+      const marker = L.circleMarker([h.lat, h.lng], { radius:9, weight:2, color: readinessColor(h), fillColor: readinessColor(h), fillOpacity:0.35 }).addTo(map);
+      marker.bindTooltip(tooltipHtml(h), { permanent:true, direction:'top', offset:[0,-8], className:'hospital-tt' });
+      state.markers[h.id] = marker;
+    });
+  }
+
+  function tooltipHtml(h){
+    const dyn = state.dyn[h.id];
+    return '<b>'+h.name+'</b><br>ICU '+dyn.icu+'/'+h.maxICU+' · Load '+dyn.load+'%';
+  }
+
+  function readinessColor(h){
+    const dyn = state.dyn[h.id];
+    const s = (dyn.icu / h.maxICU) * 0.5 + ((100-dyn.load)/100) * 0.5;
+    if (s > 0.55) return '#34D399';
+    if (s > 0.3) return '#FFB020';
+    return '#FF5C5C';
+  }
+
+  function refreshHospitalMarkers(){
+    hospitals.forEach(h => {
+      const marker = state.markers[h.id];
+      const color = readinessColor(h);
+      marker.setStyle({ color, fillColor: color });
+      marker.setTooltipContent(tooltipHtml(h));
+    });
+  }
+
+  function renderIncident(incident){
+    if (state.incidentMarker) map.removeLayer(state.incidentMarker);
+    const icon = L.divIcon({ html:'<div class="incident-marker"><div class="ring"></div><div class="dot"></div></div>', className:'', iconSize:[20,20], iconAnchor:[10,10] });
+    state.incidentMarker = L.marker([incident.lat, incident.lng], { icon }).addTo(map);
+    state.incidentMarker.bindTooltip(incident.label, { permanent:true, direction:'right', offset:[8,0], className:'incident-tt' });
+  }
+
+  function controlPoint(from, to){
+    const midLat = (from.lat+to.lat)/2, midLng = (from.lng+to.lng)/2;
+    const perpLat = -(to.lng-from.lng) * 0.25;
+    const perpLng = (to.lat-from.lat) * 0.25;
+    return { lat: midLat+perpLat, lng: midLng+perpLng };
+  }
+
+  function pointOnQuad(from, to, t, ctrl){
+    const lat = (1-t)*(1-t)*from.lat + 2*(1-t)*t*ctrl.lat + t*t*to.lat;
+    const lng = (1-t)*(1-t)*from.lng + 2*(1-t)*t*ctrl.lng + t*t*to.lng;
+    return { lat, lng };
+  }
+
+  function renderRoute(from, to){
+    if (state.routeLine) map.removeLayer(state.routeLine);
+    const ctrl = controlPoint(from, to);
+    const pts = [];
+    for (let i=0;i<=30;i++){ const p = pointOnQuad(from, to, i/30, ctrl); pts.push([p.lat, p.lng]); }
+    state.routeLine = L.polyline(pts, { color:'#FFB020', weight:2.5, dashArray:'6 6', opacity:0.85 }).addTo(map);
+    return ctrl;
+  }
+
+  function renderAmbulance(p){
+    if (!state.ambulanceMarker){
+      const icon = L.divIcon({ html:'<div class="ambulance-marker">🚑</div>', className:'', iconSize:[22,22], iconAnchor:[11,11] });
+      state.ambulanceMarker = L.marker([p.lat, p.lng], { icon }).addTo(map);
+    } else {
+      state.ambulanceMarker.setLatLng([p.lat, p.lng]);
+    }
+  }
+
+  // ---------- Decision + ranking rendering ----------
+  function renderDecision(caseType, incident, ranked, naiveId){
+    const smart = ranked[0];
+    const naive = ranked.find(r => r.hospital.id === naiveId);
+    const agree = smart.hospital.id === naiveId;
+    const meta = state.active ? state.active.trafficMeta : null;
+    const naiveMeta = meta ? meta[naive.hospital.id] : null;
+    const smartMeta = meta ? meta[smart.hospital.id] : null;
+    const card = document.getElementById('decisionCard');
+    card.innerHTML = `
+      <h2>Dispatch Decision</h2>
+      <p class="decision-empty" style="margin-bottom:4px;"><b>${caseType.name}</b> reported at ${incident.label}${state.active ? ' · '+state.active.peakState+' traffic' : ''}.</p>
+      <div class="compare">
+        <div class="side ${agree ? 'win' : ''}">
+          <div class="tag">Nearest Hospital</div>
+          <div class="name">${naive.hospital.name}</div>
+          <div class="stat">ETA <b>${naive.eta.toFixed(1)} min</b>${naiveMeta ? ' ('+naiveMeta.speed+' km/h, congestion '+naiveMeta.congestion+')' : ''}</div>
+          <div class="stat">ICU <b>${state.dyn[naive.hospital.id].icu}/${naive.hospital.maxICU}</b></div>
+          <div class="stat">Load <b>${state.dyn[naive.hospital.id].load}%</b></div>
+        </div>
+        <div class="side win">
+          <div class="tag">Golden Minute Pick</div>
+          <div class="name">${smart.hospital.name}</div>
+          <div class="stat">ETA <b>${smart.eta.toFixed(1)} min</b>${smartMeta ? ' ('+smartMeta.speed+' km/h, congestion '+smartMeta.congestion+')' : ''}</div>
+          <div class="stat">ICU <b>${state.dyn[smart.hospital.id].icu}/${smart.hospital.maxICU}</b></div>
+          <div class="stat">Load <b>${state.dyn[smart.hospital.id].load}%</b></div>
+        </div>
+      </div>
+      <div class="verdict ${agree ? 'agree' : ''}">
+        ${agree
+          ? `The nearest hospital is also the best-equipped one this time — Golden Minute confirms the naive route rather than overriding it.`
+          : `Naive routing would send this patient to <b>${naive.hospital.name}</b>, ${naive.eta.toFixed(1)} min away — but it's running at ${state.dyn[naive.hospital.id].load}% load with ${state.dyn[naive.hospital.id].icu} ICU beds open. Golden Minute redirects to <b>${smart.hospital.name}</b> instead, ${(smart.eta-naive.eta).toFixed(1)} min further, for confirmed capacity.`}
+      </div>`;
+  }
+
+  function renderRanking(ranked){
+    const el = document.getElementById('rankingList');
+    el.innerHTML = ranked.map((r,i) => `
+      <div class="ranking-row">
+        <div class="rank">#${i+1}</div>
+        <div>
+          <div class="hname">${r.hospital.name}</div>
+          <div class="sub">${r.hospital.area} · ETA ${r.eta.toFixed(1)}m · ICU ${r.icuScore.toFixed(0)} · SPEC ${r.specScore.toFixed(0)} · LOAD ${r.loadScore.toFixed(0)}</div>
+          <div class="bar-row">
+            <div class="bar"><i style="width:${r.icuScore}%"></i></div>
+            <div class="bar"><i style="width:${r.specScore}%; background:var(--amber)"></i></div>
+            <div class="bar"><i style="width:${r.loadScore}%; background:#7DD3FC"></i></div>
+            <div class="bar"><i style="width:${r.etaScore}%; background:#C4B5FD"></i></div>
+          </div>
+        </div>
+        <div class="score">${r.total.toFixed(0)}</div>
+      </div>`).join('');
+  }
+
+  function renderHospitalTable(){
+    const t = document.getElementById('hospitalTable');
+    t.innerHTML = '<tr><th>Hospital</th><th>Area</th><th>ICU beds</th><th>Total beds</th><th>Specialties modeled</th></tr>' +
+      hospitals.map(h => `<tr><td>${h.name}</td><td>${h.area}</td><td>${h.maxICU}</td><td>${h.maxBeds}</td><td>${h.specialties.length ? h.specialties.join(', ') : '—'}</td></tr>`).join('');
+  }
+
+  function currentWeights(){
+    return {
+      icu: Number(document.getElementById('wIcu').value),
+      spec: Number(document.getElementById('wSpec').value),
+      load: Number(document.getElementById('wLoad').value),
+      eta: Number(document.getElementById('wEta').value),
+    };
+  }
+
+  function refreshWeightLabels(){
+    const w = currentWeights();
+    const total = w.icu+w.spec+w.load+w.eta || 1;
+    document.getElementById('wIcuVal').textContent = Math.round(w.icu/total*100)+'%';
+    document.getElementById('wSpecVal').textContent = Math.round(w.spec/total*100)+'%';
+    document.getElementById('wLoadVal').textContent = Math.round(w.load/total*100)+'%';
+    document.getElementById('wEtaVal').textContent = Math.round(w.eta/total*100)+'%';
+  }
+
+  function recomputeForActiveWeights(){
+    if (!state.active) return;
+    const { caseType, incident, etas, naiveId } = state.active;
+    const ranked = scoreAll(caseType, etas, currentWeights());
+    state.active.ranked = ranked;
+    renderRanking(ranked);
+    renderDecision(caseType, incident, ranked, naiveId);
+  }
+
+  // ---------- Scenario / animation ----------
+  function stopAnimation(){ if (state.animId){ cancelAnimationFrame(state.animId); state.animId = null; } }
+
+  function startEmergency(){
+    stopAnimation();
+    const incident = incidentSites[rndInt(0, incidentSites.length-1)];
+    const caseType = caseTypes[rndInt(0, caseTypes.length-1)];
+    const { etas, meta, peakState } = computeEtas(incident);
+    const naive = hospitals.reduce((a,b) => etas[a.id] < etas[b.id] ? a : b);
+
+    rollLiveConditions(naive.id, caseType);
+    refreshHospitalMarkers();
+    renderIncident(incident);
+
+    const weights = currentWeights();
+    const ranked = scoreAll(caseType, etas, weights);
+    const smart = ranked[0];
+
+    state.active = { caseType, incident, etas, trafficMeta: meta, peakState, naiveId: naive.id, ranked, destinationId: smart.hospital.id, rerouted:false };
+    renderDecision(caseType, incident, ranked, naive.id);
+    renderRanking(ranked);
+
+    document.getElementById('statusPill').textContent = 'Ambulance en route';
+    document.getElementById('statusPill').classList.add('live');
+
+    log(`Dispatch requested: <b>${caseType.name}</b> at ${incident.label} · ${peakState} traffic (sampled from Chennai traffic flow dataset)`, null);
+    log(`Golden Minute pick: <b>${smart.hospital.name}</b> (score ${smart.total.toFixed(0)}) over nearest option <b>${naive.name}</b>`, smart.hospital.id === naive.id ? 'good' : 'alert');
+
+    animateTravel(incident, hospitals.find(h => h.id === smart.hospital.id), 0);
+  }
+
+  function animateTravel(from, to, startProgress){
+    renderRoute(from, to);
+    const ctrl = controlPoint(from, to);
+    const duration = 3200;
+    const startTime = performance.now() - startProgress*duration;
+    let rerouteRolled = false;
+
+    function frame(t){
+      const elapsed = t - startTime;
+      const progress = clamp(elapsed/duration, 0, 1);
+      const p = pointOnQuad(from, to, progress, ctrl);
+      renderAmbulance(p);
+
+      if (!rerouteRolled && !state.active.rerouted && progress > 0.35 && progress < 0.65 && Math.random() < 0.02){
+        rerouteRolled = true;
+        maybeReroute(p, to, progress);
+        return;
+      }
+      if (progress >= 1){ arrive(to); return; }
+      state.animId = requestAnimationFrame(frame);
+    }
+    state.animId = requestAnimationFrame(frame);
+  }
+
+  function maybeReroute(currentPos, currentDest, progress){
+    state.dyn[currentDest.id] = { icu: rndInt(0,1), load: rndInt(92,99) };
+    refreshHospitalMarkers();
+
+    const ranked = scoreAll(state.active.caseType, state.active.etas, currentWeights());
+    state.active.ranked = ranked;
+    renderRanking(ranked);
+    const newBest = ranked[0];
+
+    if (newBest.hospital.id !== currentDest.id){
+      log(`⚠ ${currentDest.name} just filled its remaining ICU capacity — rerouting to <b>${newBest.hospital.name}</b>`, 'alert');
+      state.active.rerouted = true;
+      state.active.destinationId = newBest.hospital.id;
+      renderDecision(state.active.caseType, state.active.incident, ranked, state.active.naiveId);
+      animateTravel(currentPos, newBest.hospital, 0);
+    } else {
+      log(`${currentDest.name} reports a capacity dip but remains the best option — continuing transit`, null);
+      animateTravel(currentPos, currentDest, progress);
+    }
+  }
+
+  function arrive(hospital){
+    document.getElementById('statusPill').textContent = 'Console idle';
+    document.getElementById('statusPill').classList.remove('live');
+    const ct = state.active.caseType;
+    log(`✅ Patient handed off at <b>${hospital.name}</b>`, 'good');
+    log(`Historical outcomes for ${ct.name}: avg stay ${ct.avgLOS}d · typical discharge "${ct.outcome}" · ${ct.readmit}% readmission rate (hospital admissions dataset)`, null);
+
+    const card = document.getElementById('decisionCard');
+    const div = document.createElement('div');
+    div.className = 'verdict agree';
+    div.style.marginTop = '10px';
+    div.innerHTML = `<b>Outcome projection</b> for ${ct.name} at ${hospital.name} — based on historical hospital admissions data: average length of stay <b>${ct.avgLOS} days</b>, most common discharge status <b>${ct.outcome}</b>, <b>${ct.readmit}%</b> historical readmission rate.`;
+    card.appendChild(div);
+  }
+
+  // ---------- Tabs ----------
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'map' && map){ setTimeout(() => map.invalidateSize(), 50); }
+    });
+  });
+
+  // ---------- Wire up ----------
+  document.getElementById('dispatchBtn').addEventListener('click', startEmergency);
+  ['wIcu','wSpec','wLoad','wEta'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => { refreshWeightLabels(); recomputeForActiveWeights(); });
+  });
+
+  refreshWeightLabels();
+  renderHospitalTable();
+  initMap();
+  log('Console initialized. Waiting for first dispatch.', null);
+})();
+</script>
+</body>
+</html>
